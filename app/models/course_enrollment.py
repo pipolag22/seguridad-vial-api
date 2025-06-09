@@ -10,3 +10,5 @@ class CourseEnrollment(SQLModel, table=True):
     deadline_date: date
     expiration_date: date
     status: str  # pending, completed, used, expired
+    inspector_id: Optional[int] = Field(default=None, foreign_key="inspector.id")
+    judge_id: Optional[int] = Field(default=None, foreign_key="judge.id")
