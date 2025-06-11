@@ -1,5 +1,6 @@
-from sqlmodel import SQLModel
-from enum import Enum
+from sqlmodel import SQLModel 
+from pydantic import Field
+from enum import Enum 
 
 class UserRole(str, Enum):
     NORMAL = "normal"
@@ -7,11 +8,22 @@ class UserRole(str, Enum):
     JUEZ = "juez"
     ADMIN = "admin"
 
-class UserRead(SQLModel):
+class UserCreate(SQLModel): # 
+    username: str
+    password: str
+    dni: str
+    nombres: str
+    apellidos: str
+
+class UserLogin(SQLModel): 
+    username: str
+    password: str
+
+class UserRead(SQLModel): 
     id: int
     username: str
     is_active: bool
-    role: UserRole  # Añadido
-    dni: str  # Añadido
-    nombres: str  # Añadido
-    apellidos: str  # Añadido
+    role: UserRole
+    dni: str
+    nombres: str
+    apellidos: str
