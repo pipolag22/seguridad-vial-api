@@ -1,16 +1,17 @@
-from pydantic import BaseModel
-from typing import Optional
+from sqlmodel import SQLModel
+from enum import Enum
 
-class UserCreate(BaseModel):
-    username: str
-    password: str
+class UserRole(str, Enum):
+    NORMAL = "normal"
+    INSPECTOR = "inspector"
+    JUEZ = "juez"
+    ADMIN = "admin"
 
-class UserRead(BaseModel):
+class UserRead(SQLModel):
     id: int
     username: str
     is_active: bool
-    is_admin: bool
-
-class UserLogin(BaseModel):
-    username: str
-    password: str
+    role: UserRole  # Añadido
+    dni: str  # Añadido
+    nombres: str  # Añadido
+    apellidos: str  # Añadido
