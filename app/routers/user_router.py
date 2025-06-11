@@ -1,27 +1,26 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Form
-from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer # Asegúrate de importar OAuth2PasswordBearer
+from fastapi.security import OAuth2PasswordRequestForm, OAuth2PasswordBearer 
 from sqlmodel import Session
 from app.config.database import get_session
-from app.schemas.user_schema import UserCreate, UserRead, UserRole # Importa UserRole
+from app.schemas.user_schema import UserCreate, UserRead, UserRole 
 from app.services import user_service
 from typing import Annotated
 
-# Importa las funciones de seguridad necesarias
-from app.security.security import decode_access_token # Asegúrate de que decode_access_token esté en security.py
+
+from app.security.security import decode_access_token 
 
 router = APIRouter(prefix="/users", tags=["Users"])
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="users/token") # Define o importa oauth2_scheme aquí
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="users/token") 
 
 
-# --- DEPENDENCIAS DE AUTORIZACIÓN ---
-# Mueve estas funciones AQUI, antes de cualquier @router.post/@router.get que las use
+
 
 def get_current_user(
     token: str = Depends(oauth2_scheme), session: Session = Depends(get_session)
 ) -> UserRead:
     """Dependencia para obtener el usuario actual del token JWT."""
-    from app.security.security import decode_access_token # O asegúrate que ya esté importado arriba
+    from app.security.security import decode_access_token 
     payload = decode_access_token(token)
     if payload is None:
         raise HTTPException(
@@ -47,14 +46,14 @@ def get_current_user(
 
 def get_current_admin_user(current_user: UserRead = Depends(get_current_user)):
     """Dependencia para verificar si el usuario actual es administrador."""
-    if current_user.role != UserRole.ADMIN: # Usa UserRole importado
+    if current_user.role != UserRole.ADMIN: 
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient privileges",
         )
     return current_user
 
-# --- FIN DE DEPENDENCIAS DE AUTORIZACIÓN ---
+
 
 
 @router.post("/register", response_model=UserRead)
@@ -69,30 +68,27 @@ def register_user(user_data: UserCreate, session: Session = Depends(get_session)
 def create_inspector(
     user_data: UserCreate,
     session: Session = Depends(get_session),
-    current_user: UserRead = Depends(get_current_admin_user) # Asegúrate de usar get_current_admin_user aquí
+    current_user: UserRead = Depends(get_current_admin_user) 
 ):
     """Crea un nuevo inspector (solo para administradores)."""
-    # La verificación del rol ya la hace get_current_admin_user
     return user_service.create_inspector(user_data, session)
 
 @router.post("/create_juez", response_model=UserRead)
 def create_juez(
     user_data: UserCreate,
     session: Session = Depends(get_session),
-    current_user: UserRead = Depends(get_current_admin_user) # Y aquí también
+    current_user: UserRead = Depends(get_current_admin_user) 
 ):
     """Crea un nuevo juez (solo para administradores)."""
-    # La verificación del rol ya la hace get_current_admin_user
+   
     return user_service.create_juez(user_data, session)
 
-# ... el resto de tus rutas ...
-# Por ejemplo, para /users/me
 @router.get("/me", response_model=UserRead)
-def read_users_me(current_user: UserRead = Depends(get_current_user)): # Usa get_current_user aquí
+def read_users_me(current_user: UserRead = Depends(get_current_user)): 
     """Obtiene la información del usuario actual."""
     return current_user
 
-# ... y tu endpoint /token, que no usa get_current_user para sí mismo ...
+
 @router.post("/token")
 def login_for_access_token(
     form_data: Annotated[OAuth2PasswordRequestForm, Depends()], session: Session = Depends(get_session)
