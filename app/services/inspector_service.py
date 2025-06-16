@@ -1,48 +1,53 @@
+# app/services/inspector_service.py
+
 from sqlmodel import Session, select
-from app.models.inspector import Inspector
-from app.schemas.inspector_schema import InspectorCreate, InspectorRead, InspectorUpdate
 from typing import List, Optional
 
-def create_inspector(inspector_data: InspectorCreate, session: Session) -> InspectorRead:
-    """Crea un nuevo inspector en la base de datos."""
-    db_inspector = Inspector.model_validate(inspector_data)
-    session.add(db_inspector)
+from app.models import Inspector, InspectorCreate, InspectorRead, InspectorUpdate
+
+def create_inspector(inspector_create: InspectorCreate, session: Session) -> Inspector:
+    """
+    Crea un nuevo inspector en la base de datos.
+    """
+    new_inspector = Inspector.from_orm(inspector_create) # Usar from_orm para Pydantic V1
+    session.add(new_inspector)
     session.commit()
-    session.refresh(db_inspector)
-    return InspectorRead.model_validate(db_inspector)
+    session.refresh(new_inspector)
+    return new_inspector
 
-def get_all_inspectors(session: Session) -> List[InspectorRead]:
-    """Obtiene una lista de todos los inspectores."""
-    inspectors = session.exec(select(Inspector)).all()
-    return [InspectorRead.model_validate(i) for i in inspectors]
+def get_inspector_by_id(inspector_id: int, session: Session) -> Optional[Inspector]:
+    """
+    Obtiene un inspector por su ID.
+    """
+    return session.get(Inspector, inspector_id)
 
-def get_inspector_by_id(inspector_id: int, session: Session) -> Optional[InspectorRead]:
-    """Obtiene un inspector por su ID."""
-    inspector = session.get(Inspector, inspector_id)
-    if inspector:
-        return InspectorRead.model_validate(inspector)
-    return None
+def get_all_inspectors(session: Session) -> List[Inspector]:
+    """
+    Obtiene todos los inspectores de la base de datos.
+    """
+    return session.exec(select(Inspector)).all()
 
-def update_inspector(inspector_id: int, inspector_data: InspectorUpdate, session: Session) -> Optional[InspectorRead]:
-    """Actualiza un inspector existente."""
+def update_inspector(inspector_id: int, inspector_update_data: InspectorUpdate, session: Session) -> Optional[Inspector]:
+    """
+    Actualiza un inspector existente por su ID.
+    """
     inspector = session.get(Inspector, inspector_id)
     if not inspector:
         return None
     
-    
-    update_data = inspector_data.model_dump(exclude_unset=True)
-    
-   
-    for key, value in update_data.items():
+    # Usar .dict(exclude_unset=True) para Pydantic V1
+    for key, value in inspector_update_data.dict(exclude_unset=True).items():
         setattr(inspector, key, value)
     
-    session.add(inspector) 
+    session.add(inspector)
     session.commit()
-    session.refresh(inspector) 
-    return InspectorRead.model_validate(inspector)
+    session.refresh(inspector)
+    return inspector
 
 def delete_inspector(inspector_id: int, session: Session) -> bool:
-    """Elimina un inspector por su ID."""
+    """
+    Elimina un inspector por su ID.
+    """
     inspector = session.get(Inspector, inspector_id)
     if not inspector:
         return False

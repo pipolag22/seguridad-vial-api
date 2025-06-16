@@ -1,44 +1,60 @@
-from sqlmodel import SQLModel, Field, Relationship
-from typing import Optional, List
+from __future__ import annotations
+from typing import Optional
 from datetime import date
 from enum import Enum
-
-# Importar los modelos relacionados para las relaciones
-# Asegúrate de que estos archivos existan en tu estructura (app/models/person.py, app/models/traffic_safety_course.py, etc.)
-from app.models.person import Person
-from app.models.traffic_safety_course import TrafficSafetyCourse
-from app.models.inspector import Inspector
-from app.models.judge import Judge
+from sqlmodel import SQLModel, Field, Relationship
+from sqlalchemy.orm import relationship as sa_relationship
 
 
 class CourseEnrollmentStatus(str, Enum):
-    PENDING = "pending"       # Inscrito, esperando completar el curso
-    COMPLETED = "completed"   # Curso completado, válido por un tiempo
-    USED = "used"             # Curso usado por un inspector/juez
-    EXPIRED = "expired"       # Curso ha caducado (fecha de expiración pasada)
-    INCOMPLETE = "incomplete" # Curso no completado a tiempo (pasó la fecha límite, pero no la de expiración total)
+    PENDING = "pending"
+    COMPLETED = "completed"
+    USED = "used"
+    EXPIRED = "expired"
+    INCOMPLETE = "incomplete"
 
-class CourseEnrollment(SQLModel, table=True):
+class CourseEnrollmentBase(SQLModel):
+    person_id: int = Field(foreign_key="person.id")
+    course_id: int = Field(foreign_key="trafficsafetycourse.id")
+    enrollment_date: date = Field(default_factory=date.today)
+    completion_date: Optional[date] = None
+    deadline_date: date
+    expiration_date: date
+    status: CourseEnrollmentStatus = Field(default=CourseEnrollmentStatus.PENDING)
+    inspector_id: Optional[int] = Field(default=None, foreign_key="inspector.id")
+    judge_id: Optional[int] = Field(default=None, foreign_key="judge.id")
+
+class CourseEnrollmentCreate(CourseEnrollmentBase):
+    pass
+
+class CourseEnrollmentRead(CourseEnrollmentBase):
+    id: int
+
+class CourseEnrollmentUpdate(SQLModel):
+    completion_date: Optional[date] = None
+    status: Optional[CourseEnrollmentStatus] = None
+    inspector_id: Optional[int] = None
+    judge_id: Optional[int] = None
+    deadline_date: Optional[date] = None
+    expiration_date: Optional[date] = None
+
+class CourseEnrollment(CourseEnrollmentBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    person_id: int = Field(foreign_key="person.id", index=True) # Añadir index para búsquedas eficientes
-    course_id: int = Field(foreign_key="trafficsafetycourse.id", index=True) # Añadir index
-
-    enrollment_date: date = Field(default_factory=date.today) # Fecha de inscripción
-    completion_date: Optional[date] = None # Fecha en la que el curso fue completado
-    deadline_date: date # Fecha límite para completar el curso (ej. 2 meses desde enrollment_date)
-    expiration_date: date # Fecha en que la certificación caduca (ej. 6 meses desde completion_date o fecha de uso)
-
-    status: CourseEnrollmentStatus = Field(default=CourseEnrollmentStatus.PENDING, index=True) # Añadir index
-
-    inspector_id: Optional[int] = Field(default=None, foreign_key="inspector.id", index=True)
-    judge_id: Optional[int] = Field(default=None, foreign_key="judge.id", index=True)
-
-    # --- Relaciones ---
-    # Una inscripción pertenece a una Persona
-    person: Person = Relationship(back_populates="course_enrollments")
-    # Una inscripción pertenece a un Curso
-    course: TrafficSafetyCourse = Relationship(back_populates="course_enrollments")
-    # Una inscripción puede ser usada por un Inspector (Opcional)
-    inspector: Optional[Inspector] = Relationship(back_populates="used_enrollments")
-    # Una inscripción puede ser usada por un Juez (Opcional)
-    judge: Optional[Judge] = Relationship(back_populates="used_enrollments")
+    
+    # Relaciones
+    person: "Person" = Relationship(
+        back_populates="course_enrollments",
+        sa_relationship=sa_relationship("Person", back_populates="course_enrollments")
+    )
+    course: "TrafficSafetyCourse" = Relationship(
+        back_populates="course_enrollments",
+        sa_relationship=sa_relationship("TrafficSafetyCourse", back_populates="course_enrollments")
+    )
+    inspector: Optional["Inspector"] = Relationship(
+        back_populates="used_enrollments",
+        sa_relationship=sa_relationship("Inspector", back_populates="used_enrollments")
+    )
+    judge: Optional["Judge"] = Relationship(
+        back_populates="used_enrollments",
+        sa_relationship=sa_relationship("Judge", back_populates="used_enrollments")
+    )

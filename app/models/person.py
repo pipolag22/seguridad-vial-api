@@ -1,15 +1,31 @@
-from __future__ import annotations 
-
+from __future__ import annotations
+from typing import List, Optional
 from sqlmodel import SQLModel, Field, Relationship
-from typing import Optional, List 
+from sqlalchemy.orm import relationship as sa_relationship
+from sqlmodel import Field, SQLModel
 
 
 
 
-class Person(SQLModel, table=True):
+class PersonBase(SQLModel):
+    name: str = Field(..., max_length=100, index=True)
+    dni: str = Field(..., max_length=20, unique=True)
+
+class PersonCreate(PersonBase):
+    pass
+
+class PersonRead(PersonBase):
+    id: int
+
+class PersonUpdate(SQLModel):
+    name: Optional[str] = Field(default=None, max_length=100)
+    dni: Optional[str] = Field(default=None, max_length=20)
+
+class Person(PersonBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    name: str
-    dni: str 
-
-    #Una persona puede tener muchas inscripciones a cursos
-    course_enrollments: List["CourseEnrollment"] = Relationship(back_populates="person")
+    
+    # Relación con CourseEnrollment
+    course_enrollments: List["CourseEnrollment"] = Relationship(
+        back_populates="person",
+        sa_relationship=sa_relationship("CourseEnrollment", back_populates="person")
+    )

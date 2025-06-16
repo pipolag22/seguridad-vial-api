@@ -1,41 +1,52 @@
 from sqlmodel import Session, select
-from app.models.person import Person
-from app.schemas.person_schema import PersonCreate, PersonRead, PersonUpdate
 from typing import List, Optional
 
-def create_person(person_data: PersonCreate, session: Session) -> PersonRead:
-    db_person = Person.model_validate(person_data)
-    session.add(db_person)
+from app.models import Person, PersonCreate, PersonRead, PersonUpdate
+
+def create_person(person_create: PersonCreate, session: Session) -> Person:
+    """
+    Crea una nueva persona en la base de datos.
+    """
+    new_person = Person.from_orm(person_create) # Usar from_orm para Pydantic V1
+    session.add(new_person)
     session.commit()
-    session.refresh(db_person)
-    return PersonRead.model_validate(db_person)
+    session.refresh(new_person)
+    return new_person
 
-def get_all_persons(session: Session) -> List[PersonRead]:
-    persons = session.exec(select(Person)).all()
-    return [PersonRead.model_validate(p) for p in persons]
+def get_person_by_id(person_id: int, session: Session) -> Optional[Person]:
+    """
+    Obtiene una persona por su ID.
+    """
+    return session.get(Person, person_id)
 
-def get_person_by_id(person_id: int, session: Session) -> Optional[PersonRead]:
-    person = session.get(Person, person_id)
-    if person:
-        return PersonRead.model_validate(person)
-    return None
+def get_all_persons(session: Session) -> List[Person]:
+    """
+    Obtiene todas las personas de la base de datos.
+    """
+    return session.exec(select(Person)).all()
 
-def update_person(person_id: int, person_data: PersonUpdate, session: Session) -> Optional[PersonRead]:
+def update_person(person_id: int, person_update_data: PersonUpdate, session: Session) -> Optional[Person]:
+    """
+    Actualiza una persona existente por su ID.
+    """
     person = session.get(Person, person_id)
     if not person:
         return None
-
     
-    update_data = person_data.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
+    # Actualizar solo los campos proporcionados en person_update_data
+    # Usar .dict(exclude_unset=True) para Pydantic V1
+    for key, value in person_update_data.dict(exclude_unset=True).items():
         setattr(person, key, value)
-
+    
     session.add(person)
     session.commit()
     session.refresh(person)
-    return PersonRead.model_validate(person)
+    return person
 
 def delete_person(person_id: int, session: Session) -> bool:
+    """
+    Elimina una persona por su ID.
+    """
     person = session.get(Person, person_id)
     if not person:
         return False

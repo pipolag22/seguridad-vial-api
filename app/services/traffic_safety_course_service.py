@@ -1,40 +1,53 @@
+# app/services/traffic_safety_course_service.py
+
 from sqlmodel import Session, select
-from app.models.traffic_safety_course import TrafficSafetyCourse
-from app.schemas.traffic_safety_course_schema import TrafficSafetyCourseCreate, TrafficSafetyCourseRead, TrafficSafetyCourseUpdate
 from typing import List, Optional
 
-def create_course(course_data: TrafficSafetyCourseCreate, session: Session) -> TrafficSafetyCourseRead:
-    db_course = TrafficSafetyCourse.model_validate(course_data)
-    session.add(db_course)
+from app.models import TrafficSafetyCourse, TrafficSafetyCourseCreate, TrafficSafetyCourseRead, TrafficSafetyCourseUpdate
+
+def create_course(course_create: TrafficSafetyCourseCreate, session: Session) -> TrafficSafetyCourse:
+    """
+    Crea un nuevo curso de seguridad vial en la base de datos.
+    """
+    new_course = TrafficSafetyCourse.from_orm(course_create) # Usar from_orm para Pydantic V1
+    session.add(new_course)
     session.commit()
-    session.refresh(db_course)
-    return TrafficSafetyCourseRead.model_validate(db_course)
+    session.refresh(new_course)
+    return new_course
 
-def get_all_courses(session: Session) -> List[TrafficSafetyCourseRead]:
-    courses = session.exec(select(TrafficSafetyCourse)).all()
-    return [TrafficSafetyCourseRead.model_validate(c) for c in courses]
+def get_course_by_id(course_id: int, session: Session) -> Optional[TrafficSafetyCourse]:
+    """
+    Obtiene un curso de seguridad vial por su ID.
+    """
+    return session.get(TrafficSafetyCourse, course_id)
 
-def get_course_by_id(course_id: int, session: Session) -> Optional[TrafficSafetyCourseRead]:
-    course = session.get(TrafficSafetyCourse, course_id)
-    if course:
-        return TrafficSafetyCourseRead.model_validate(course)
-    return None
+def get_all_courses(session: Session) -> List[TrafficSafetyCourse]:
+    """
+    Obtiene todos los cursos de seguridad vial de la base de datos.
+    """
+    return session.exec(select(TrafficSafetyCourse)).all()
 
-def update_course(course_id: int, course_data: TrafficSafetyCourseUpdate, session: Session) -> Optional[TrafficSafetyCourseRead]:
+def update_course(course_id: int, course_update_data: TrafficSafetyCourseUpdate, session: Session) -> Optional[TrafficSafetyCourse]:
+    """
+    Actualiza un curso de seguridad vial existente por su ID.
+    """
     course = session.get(TrafficSafetyCourse, course_id)
     if not course:
         return None
-
-    update_data = course_data.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
+    
+    # Usar .dict(exclude_unset=True) para Pydantic V1
+    for key, value in course_update_data.dict(exclude_unset=True).items():
         setattr(course, key, value)
-
+    
     session.add(course)
     session.commit()
     session.refresh(course)
-    return TrafficSafetyCourseRead.model_validate(course)
+    return course
 
 def delete_course(course_id: int, session: Session) -> bool:
+    """
+    Elimina un curso de seguridad vial por su ID.
+    """
     course = session.get(TrafficSafetyCourse, course_id)
     if not course:
         return False

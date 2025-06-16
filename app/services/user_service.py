@@ -1,67 +1,87 @@
 from sqlmodel import Session, select
-from app.models.user import User, UserRole
-from app.schemas.user_schema import UserCreate, UserRead
-from app.security.security import get_password_hash, create_access_token
-from fastapi import HTTPException, status
-from datetime import timedelta
-from typing import Optional
+from passlib.context import CryptContext
+from typing import Optional, List
 
-ACCESS_TOKEN_EXPIRE_MINUTES = 120
+from app.models import User, UserRole, UserCreate, UserUpdate
 
-def create_user(user_data: UserCreate, session: Session, role: UserRole = UserRole.NORMAL) -> UserRead:
-    """Crea un nuevo usuario en la base de datos."""
-    hashed_password = get_password_hash(user_data.password)
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+
+def create_user(user_create: UserCreate, session: Session) -> User:
+    """
+    Crea un nuevo usuario en la base de datos.
+    Hashea la contraseña antes de guardarla.
+    """
     db_user = User(
-        username=user_data.username,
-        hashed_password=hashed_password,
-        dni=user_data.dni,
-        nombres=user_data.nombres,
-        apellidos=user_data.apellidos,
-        role=role  
+        username=user_create.username,
+        dni=user_create.dni,
+        nombres=user_create.nombres,
+        apellidos=user_create.apellidos,
+        is_active=user_create.is_active,
+        role=user_create.role,
+        hashed_password=pwd_context.hash(user_create.password)
     )
     session.add(db_user)
-    try:
-        session.commit()
-        session.refresh(db_user)
-        return UserRead.model_validate(db_user)
-    except Exception as e:
-        session.rollback()
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Error creando usuario: {e}")
+    session.commit()
+    session.refresh(db_user)
+    return db_user
 
-def create_inspector(user_data: UserCreate, session: Session) -> UserRead:
-    """Crea un nuevo inspector (solo para administradores)."""
-    return create_user(user_data, session, role=UserRole.INSPECTOR)
-
-def create_juez(user_data: UserCreate, session: Session) -> UserRead:
-    """Crea un nuevo juez (solo para administradores)."""
-    return create_user(user_data, session, role=UserRole.JUEZ)
-
-def get_user_by_username(username: str, session: Session) -> Optional[UserRead]:
-    """Obtiene un usuario por su nombre de usuario."""
-    user = session.exec(select(User).where(User.username == username)).first()
-    if user:
-        return UserRead.model_validate(user)
-    return None
-
-def get_user_by_dni(dni: str, session: Session) -> Optional[UserRead]:
-    """Obtiene un usuario por su DNI."""
-    user = session.exec(select(User).where(User.dni == dni)).first()
-    if user:
-        return UserRead.model_validate(user)
-    return None
+def get_user_by_username(username: str, session: Session) -> Optional[User]:
+    """
+    Busca un usuario por su nombre de usuario.
+    """
+    return session.exec(select(User).where(User.username == username)).first()
 
 def authenticate_user(username: str, password: str, session: Session) -> Optional[User]:
-    """Autentica un usuario por nombre de usuario y contraseña."""
-    user = session.exec(select(User).where(User.username == username)).first()
-    if not user or not verify_password(password, user.hashed_password):
+    """
+    Autentica un usuario verificando su nombre de usuario y contraseña.
+    """
+    user = get_user_by_username(username, session)
+    if not user:
+        return None
+    if not pwd_context.verify(password, user.hashed_password):
         return None
     return user
 
-def create_user_access_token(user: User) -> str:
-    """Crea un token de acceso para un usuario."""
-    access_token_expires = timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
-    access_token = create_access_token(
-        data={"sub": user.username, "role": user.role}, 
-        expires_delta=access_token_expires,
-    )
-    return access_token
+def get_user_by_id(user_id: int, session: Session) -> Optional[User]:
+    """
+    Obtiene un usuario por su ID.
+    """
+    return session.get(User, user_id)
+
+def get_users(session: Session) -> List[User]:
+    """
+    Obtiene todos los usuarios de la base de datos.
+    """
+    return session.exec(select(User)).all()
+
+def update_user(user_id: int, user_update_data: UserUpdate, session: Session) -> Optional[User]:
+    """
+    Actualiza un usuario existente por su ID.
+    """
+    user = session.get(User, user_id)
+    if not user:
+        return None
+    
+    update_data = user_update_data.dict(exclude_unset=True)
+    
+    for key, value in update_data.items():
+        if key == "password" and value is not None:
+            setattr(user, "hashed_password", pwd_context.hash(value))
+        else:
+            setattr(user, key, value)
+    
+    session.add(user)
+    session.commit()
+    session.refresh(user)
+    return user
+
+def delete_user(user_id: int, session: Session) -> bool:
+    """
+    Elimina un usuario por su ID.
+    """
+    user = session.get(User, user_id)
+    if not user:
+        return False
+    session.delete(user)
+    session.commit()
+    return True
