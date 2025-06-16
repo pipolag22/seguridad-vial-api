@@ -1,5 +1,5 @@
 fastapi==0.110.0
-sqlmodel @ git+https://github.com/tiangolo/sqlmodel@main
+sqlmodel @ git+https://github.com/tiangolo/sqlmodel@d42c85f905dc3965d1b3c34275b7c08fcd933532
 SQLAlchemy==2.0.14
 pydantic==2.7.1
 uvicorn==0.29.0

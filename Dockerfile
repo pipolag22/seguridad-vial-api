@@ -10,8 +10,13 @@ COPY requirements.txt .
 # Actualiza pip a la última versión para asegurar que pueda resolver las dependencias.
 RUN pip install --no-cache-dir --upgrade pip
 
+# Instala git y otras herramientas de compilación necesarias para dependencias.
+# Limpia el cache de apt para reducir el tamaño final de la imagen.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends git build-essential && \
+    rm -rf /var/lib/apt/lists/*
+
 # Instala las dependencias Python desde requirements.txt
-# Importante: Este requirements.txt usa sqlmodel==0.0.24 y otras versiones compatibles.
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copia el resto de tu código de la aplicación al directorio de trabajo en el contenedor
