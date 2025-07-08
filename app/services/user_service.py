@@ -1,10 +1,15 @@
+# app/services/user_service.py
+
 from sqlmodel import Session, select
 from passlib.context import CryptContext
 from typing import Optional, List
+from datetime import date # Asegúrate de que date esté importado si se usa en otros métodos
 
 from app.models import User, UserRole, UserCreate, UserUpdate
 
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# Contexto para el hashing de contraseñas
+# ESTO DEBE SER pbkdf2_sha256. ¡CRÍTICO!
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 def create_user(user_create: UserCreate, session: Session) -> User:
     """
@@ -37,9 +42,19 @@ def authenticate_user(username: str, password: str, session: Session) -> Optiona
     """
     user = get_user_by_username(username, session)
     if not user:
+        print(f"DEBUG: Usuario '{username}' no encontrado.") # Depuración
         return None
+    
+    # --- LÍNEAS DE DEBUGGING CRÍTICAS ---
+    print(f"DEBUG (authenticate): Contraseña hasheada desde DB: '{user.hashed_password}'")
+    print(f"DEBUG (authenticate): Contraseña en texto plano (NO HASHEADA): '{password}'")
+    print(f"DEBUG (authenticate): pwd_context schemes: {pwd_context.schemes()}")
+    # --- FIN LÍNEAS DE DEBUGGING ---
+
     if not pwd_context.verify(password, user.hashed_password):
+        print("DEBUG (authenticate): Verificación de contraseña fallida.") # Depuración
         return None
+    print("DEBUG (authenticate): Verificación de contraseña exitosa.") # Depuración
     return user
 
 def get_user_by_id(user_id: int, session: Session) -> Optional[User]:

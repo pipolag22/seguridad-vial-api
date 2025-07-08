@@ -103,6 +103,8 @@ El proyecto sigue una estructura modular para una mejor organización y separaci
 │   ├── security/           # Lógica de seguridad (hashing, JWT)
 │   │   ├── init.py
 │   │   └── security.py
+│   │    tests/
+│   │       └── test_main.py
 │   └── main.py             # Punto de entrada de la aplicación FastAPI
 ├── create_admin.py         # Script para inicializar un usuario administrador
 ├── Dockerfile              # Archivo para construir la imagen Docker

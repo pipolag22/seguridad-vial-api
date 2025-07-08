@@ -3,13 +3,14 @@
 from sqlmodel import Session, select
 from typing import List, Optional
 
+
 from app.models import TrafficSafetyCourse, TrafficSafetyCourseCreate, TrafficSafetyCourseRead, TrafficSafetyCourseUpdate
 
 def create_course(course_create: TrafficSafetyCourseCreate, session: Session) -> TrafficSafetyCourse:
     """
     Crea un nuevo curso de seguridad vial en la base de datos.
     """
-    new_course = TrafficSafetyCourse.from_orm(course_create) # Usar from_orm para Pydantic V1
+    new_course = TrafficSafetyCourse.model_validate(course_create) 
     session.add(new_course)
     session.commit()
     session.refresh(new_course)
@@ -35,8 +36,10 @@ def update_course(course_id: int, course_update_data: TrafficSafetyCourseUpdate,
     if not course:
         return None
     
-    # Usar .dict(exclude_unset=True) para Pydantic V1
-    for key, value in course_update_data.dict(exclude_unset=True).items():
+    # Actualiza los campos del modelo con los datos de entrada
+    # Usar model_dump(exclude_unset=True) para Pydantic V2
+    course_data = course_update_data.model_dump(exclude_unset=True)
+    for key, value in course_data.items():
         setattr(course, key, value)
     
     session.add(course)

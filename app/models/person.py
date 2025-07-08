@@ -1,15 +1,13 @@
+# app/models/person.py
 from __future__ import annotations
-from typing import List, Optional
-from sqlmodel import SQLModel, Field, Relationship
-from sqlalchemy.orm import relationship as sa_relationship
-from sqlmodel import Field, SQLModel
 
-
-
+from sqlmodel import SQLModel, Field
+from typing import Optional, List
+# from sqlalchemy.orm import Mapped # No necesitamos Mapped si no hay Relationship
 
 class PersonBase(SQLModel):
-    name: str = Field(..., max_length=100, index=True)
-    dni: str = Field(..., max_length=20, unique=True)
+    name: str
+    dni: str
 
 class PersonCreate(PersonBase):
     pass
@@ -18,14 +16,11 @@ class PersonRead(PersonBase):
     id: int
 
 class PersonUpdate(SQLModel):
-    name: Optional[str] = Field(default=None, max_length=100)
-    dni: Optional[str] = Field(default=None, max_length=20)
+    name: Optional[str] = None
+    dni: Optional[str] = None
 
 class Person(PersonBase, table=True):
     id: Optional[int] = Field(default=None, primary_key=True)
-    
-    # Relación con CourseEnrollment
-    course_enrollments: List["CourseEnrollment"] = Relationship(
-        back_populates="person",
-        sa_relationship=sa_relationship("CourseEnrollment", back_populates="person")
-    )
+
+    # RELACIÓN TEMPORALMENTE ELIMINADA
+    # course_enrollments: Mapped[List["CourseEnrollment"]] = Relationship(back_populates="person")

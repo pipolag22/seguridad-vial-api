@@ -1,151 +1,228 @@
+# app/routers/course_enrollment_router.py
+
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlmodel import Session
+from sqlmodel import Session, select, col, and_
 from typing import List, Optional
-from datetime import date
+from sqlalchemy.orm import selectinload # Importar selectinload para cargar relaciones
+from pydantic import parse_obj_as # Importar para compatibilidad con Pydantic V1
 
 from app.config.database import get_session
-from app.models import CourseEnrollment, CourseEnrollmentCreate, CourseEnrollmentRead, CourseEnrollmentUpdate
-from app.models.course_enrollment import CourseEnrollmentReportItem 
+# Importar modelos y esquemas necesarios. Se eliminó 'CourseEnrollmentReportItem'
+from app.models import CourseEnrollment, CourseEnrollmentCreate, CourseEnrollmentRead, CourseEnrollmentUpdate, User, CourseEnrollmentStatus, Person, TrafficSafetyCourse, Inspector, Judge
+
 from app.services import course_enrollment_service
-from app.routers.user_router import get_current_admin_user, get_current_inspector_user, get_current_judge_user, get_current_user # Asegúrate de que estos imports sean correctos para tus funciones de seguridad
+from app.routers.user_router import get_current_user, get_current_admin_user, get_current_inspector_user, get_current_judge_user
 
+router = APIRouter(prefix="/enrollments", tags=["Course Enrollments"])
 
-router = APIRouter(prefix="/course-enrollments", tags=["Course Enrollments"])
-
-@router.post("/", response_model=CourseEnrollmentRead, status_code=status.HTTP_201_CREATED, summary="Crear una nueva inscripción a curso")
-def create_course_enrollment_endpoint(
+@router.post("/", response_model=CourseEnrollmentRead, status_code=status.HTTP_201_CREATED)
+def create_enrollment(
     enrollment_create: CourseEnrollmentCreate,
     session: Session = Depends(get_session),
-    current_user: Optional[str] = Depends(get_current_admin_user)
+    current_user: User = Depends(get_current_admin_user) # Solo ADMIN puede crear
 ):
     """
-    Crea una nueva inscripción para un curso de seguridad vial.
-    La fecha de expiración se calculará automáticamente si no se proporciona.
-    Requiere rol de ADMIN.
+    Crea una nueva inscripción de curso de seguridad vial.
+    Requiere rol de Administrador.
     """
-    new_enrollment = course_enrollment_service.create_course_enrollment(enrollment_create, session)
-    return new_enrollment
+    try:
+        new_enrollment = course_enrollment_service.create_enrollment(enrollment_create, session)
+        return new_enrollment
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-@router.get("/", response_model=List[CourseEnrollmentRead], summary="Obtener todas las inscripciones a cursos")
-def read_all_course_enrollments_endpoint(
+@router.get("/", response_model=List[CourseEnrollmentRead])
+def read_all_enrollments(
     session: Session = Depends(get_session),
-    current_user: Optional[str] = Depends(get_current_inspector_user) 
+    current_user: User = Depends(get_current_user) # Cualquier user autenticado puede leer
 ):
     """
     Obtiene una lista de todas las inscripciones a cursos de seguridad vial.
-    Requiere rol de ADMIN o INSPECTOR.
+    Requiere autenticación.
     """
-    enrollments = course_enrollment_service.get_all_course_enrollments(session)
-    return enrollments
+    # Usar `options(selectinload(...))` para cargar relaciones si se necesitan en CourseEnrollmentRead
+    # Esta es una buena práctica para evitar N+1 queries.
+    enrollments = session.exec(
+        select(CourseEnrollment)
+        .options(selectinload(CourseEnrollment.person))
+        .options(selectinload(CourseEnrollment.course))
+        .options(selectinload(CourseEnrollment.inspector))
+        .options(selectinload(CourseEnrollment.judge))
+    ).all()
+    # Convertir los objetos SQLModel (ORM) a los esquemas de lectura de Pydantic
+    # parse_obj_as es la forma de Pydantic V1 de hacer lo que model_validate hace en V2.
+    return parse_obj_as(List[CourseEnrollmentRead], enrollments)
 
-@router.get("/{enrollment_id}", response_model=CourseEnrollmentRead, summary="Obtener inscripción por ID")
-def read_course_enrollment_endpoint(
+@router.get("/{enrollment_id}", response_model=CourseEnrollmentRead)
+def read_enrollment(
     enrollment_id: int,
     session: Session = Depends(get_session),
-    current_user: Optional[str] = Depends(get_current_inspector_user) # ADMIN o INSPECTOR pueden ver por ID
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Obtiene los detalles de una inscripción a curso específica por su ID.
-    Requiere rol de ADMIN o INSPECTOR.
+    Obtiene una inscripción a curso de seguridad vial por su ID.
+    Requiere autenticación.
     """
-    enrollment = course_enrollment_service.get_course_enrollment_by_id(enrollment_id, session)
+    enrollment = session.exec(
+        select(CourseEnrollment)
+        .where(CourseEnrollment.id == enrollment_id)
+        .options(selectinload(CourseEnrollment.person))
+        .options(selectinload(CourseEnrollment.course))
+        .options(selectinload(CourseEnrollment.inspector))
+        .options(selectinload(CourseEnrollment.judge))
+    ).first()
     if not enrollment:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inscripción no encontrada")
-    return enrollment
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Enrollment not found")
+    return parse_obj_as(CourseEnrollmentRead, enrollment)
 
-@router.put("/{enrollment_id}", response_model=CourseEnrollmentRead, summary="Actualizar inscripción por ID")
-def update_course_enrollment_endpoint(
+@router.put("/{enrollment_id}", response_model=CourseEnrollmentRead)
+def update_enrollment(
     enrollment_id: int,
-    enrollment_update: CourseEnrollmentUpdate,
+    updated_data: CourseEnrollmentUpdate,
     session: Session = Depends(get_session),
-    current_user: Optional[str] = Depends(get_current_admin_user) # Solo ADMIN puede actualizar inscripciones
+    current_user: User = Depends(get_current_admin_user) # Solo ADMIN puede actualizar
 ):
     """
-    Actualiza la información de una inscripción a curso existente por su ID.
-    Requiere rol de ADMIN.
+    Actualiza una inscripción a curso de seguridad vial existente por su ID.
+    Requiere rol de Administrador.
     """
-    updated_data = enrollment_update.model_dump(exclude_unset=True)
-    updated_enrollment = course_enrollment_service.update_course_enrollment(enrollment_id, updated_data, session)
-    if not updated_enrollment:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inscripción no encontrada")
-    return updated_enrollment
+    enrollment = course_enrollment_service.update_enrollment(enrollment_id, updated_data, session)
+    if not enrollment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Enrollment not found")
+    
+    # Después de actualizar, cargar las relaciones para la respuesta
+    updated_enrollment_with_relations = session.exec(
+        select(CourseEnrollment)
+        .where(CourseEnrollment.id == enrollment.id)
+        .options(selectinload(CourseEnrollment.person))
+        .options(selectinload(CourseEnrollment.course))
+        .options(selectinload(CourseEnrollment.inspector))
+        .options(selectinload(CourseEnrollment.judge))
+    ).first()
+    return parse_obj_as(CourseEnrollmentRead, updated_enrollment_with_relations)
 
-@router.delete("/{enrollment_id}", status_code=status.HTTP_204_NO_CONTENT, summary="Eliminar inscripción por ID")
-def delete_course_enrollment_endpoint(
+
+@router.delete("/{enrollment_id}", status_code=status.HTTP_204_NO_CONTENT)
+def delete_enrollment(
     enrollment_id: int,
     session: Session = Depends(get_session),
-    current_user: Optional[str] = Depends(get_current_admin_user) # Solo ADMIN puede eliminar inscripciones
+    current_user: User = Depends(get_current_admin_user) # Solo ADMIN puede eliminar
 ):
     """
-    Elimina una inscripción a curso del sistema por su ID.
-    Requiere rol de ADMIN.
+    Elimina una inscripción a curso de seguridad vial por su ID.
+    Requiere rol de Administrador.
     """
-    if not course_enrollment_service.delete_course_enrollment(enrollment_id, session):
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inscripción no encontrada")
+    if not course_enrollment_service.delete_enrollment(enrollment_id, session):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Enrollment not found")
     return
 
+# --- Endpoints específicos para inspectores y jueces ---
 
-
-@router.put(
-    "/{enrollment_id}/complete",
-    response_model=CourseEnrollmentRead,
-    summary="Marcar inscripción como Completada",
-    description="Marca una inscripción a curso como 'Completada' y establece la fecha de finalización. Si la inscripción es marcada como completada, su fecha de expiración se recalcula a 60 días desde la finalización. Requiere rol de ADMIN, INSPECTOR o JUEZ."
-)
-def complete_enrollment_endpoint(
+@router.post("/{enrollment_id}/complete", response_model=CourseEnrollmentRead)
+def complete_enrollment(
     enrollment_id: int,
     session: Session = Depends(get_session),
-    current_user: Optional[str] = Depends(get_current_inspector_user) 
-   
+    current_user: User = Depends(get_current_inspector_user) # Solo Inspector puede marcar como completado
 ):
     """
-    Permite a un inspector o juez marcar una inscripción como completada,
-    actualizando su estado y calculando la nueva fecha de vencimiento.
+    Marca una inscripción como 'completed'.
+    Requiere rol de Inspector.
     """
-    updated_enrollment = course_enrollment_service.mark_enrollment_as_completed(enrollment_id, session)
-    if not updated_enrollment:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inscripción no encontrada")
-    return updated_enrollment
+    enrollment = course_enrollment_service.complete_enrollment(enrollment_id, current_user.id, session)
+    if not enrollment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Enrollment not found or already completed")
+    
+    # Cargar relaciones para la respuesta
+    completed_enrollment_with_relations = session.exec(
+        select(CourseEnrollment)
+        .where(CourseEnrollment.id == enrollment.id)
+        .options(selectinload(CourseEnrollment.person))
+        .options(selectinload(CourseEnrollment.course))
+        .options(selectinload(CourseEnrollment.inspector))
+        .options(selectinload(CourseEnrollment.judge))
+    ).first()
+    return parse_obj_as(CourseEnrollmentRead, completed_enrollment_with_relations)
 
-@router.put(
-    "/{enrollment_id}/expire-by-action",
-    response_model=CourseEnrollmentRead,
-    summary="Marcar inscripción como Expirada (por acción)",
-    description="Marca una inscripción a curso como 'Expirada' por acción de un inspector o juez, actualizando su estado y la fecha de expiración a la fecha actual. Requiere rol de ADMIN, INSPECTOR o JUEZ."
-)
-def expire_enrollment_by_action_endpoint(
+
+@router.post("/{enrollment_id}/use", response_model=CourseEnrollmentRead)
+def use_enrollment(
     enrollment_id: int,
     session: Session = Depends(get_session),
-    current_user: Optional[str] = Depends(get_current_admin_user) 
+    current_user: User = Depends(get_current_judge_user) # Solo Juez puede marcar como usado
 ):
     """
-    Permite a un inspector o juez marcar una inscripción como expirada,
-    estableciendo su estado y fecha de expiración al día actual.
+    Marca una inscripción como 'used'.
+    Requiere rol de Juez.
     """
-    updated_enrollment = course_enrollment_service.mark_enrollment_as_expired_by_action(enrollment_id, session)
-    if not updated_enrollment:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Inscripción no encontrada")
-    return updated_enrollment
+    enrollment = course_enrollment_service.use_enrollment(enrollment_id, current_user.id, session)
+    if not enrollment:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Enrollment not found or not in a 'completed' state")
+    
+    # Cargar relaciones para la respuesta
+    used_enrollment_with_relations = session.exec(
+        select(CourseEnrollment)
+        .where(CourseEnrollment.id == enrollment.id)
+        .options(selectinload(CourseEnrollment.person))
+        .options(selectinload(CourseEnrollment.course))
+        .options(selectinload(CourseEnrollment.inspector))
+        .options(selectinload(CourseEnrollment.judge))
+    ).first()
+    return parse_obj_as(CourseEnrollmentRead, used_enrollment_with_relations)
 
 
-@router.get(
-    "/reports/expiring-or-expired",
-    response_model=List[CourseEnrollmentReportItem],
-    summary="Reporte de Inscripciones Próximas a Vencer/Vencidas",
-    description="Genera un reporte de inscripciones a cursos que están próximas a vencer (dentro de los días especificados) o que ya han vencido. Incluye detalles de la persona y el curso asociado. Requiere rol de ADMIN o INSPECTOR."
-)
-def get_expiring_enrollments_report_endpoint(
-    days_until_expiration: int = 30,
+@router.get("/person/{person_id}", response_model=List[CourseEnrollmentRead])
+def get_enrollments_by_person(
+    person_id: int,
     session: Session = Depends(get_session),
-    current_user: Optional[str] = Depends(get_current_inspector_user) 
+    current_user: User = Depends(get_current_user)
 ):
     """
-    Genera un reporte de inscripciones a cursos que están próximas a vencer
-    (dentro de los `days_until_expiration` días) o que ya han vencido.
-    Incluye detalles de la persona y el curso asociado.
+    Obtiene todas las inscripciones de una persona específica.
     """
-    report_data = course_enrollment_service.get_expiring_or_expired_enrollments_report(
-        session,
-        days_until_expiration=days_until_expiration
-    )
-    return report_data
+    enrollments = session.exec(
+        select(CourseEnrollment)
+        .where(CourseEnrollment.person_id == person_id)
+        .options(selectinload(CourseEnrollment.person))
+        .options(selectinload(CourseEnrollment.course))
+        .options(selectinload(CourseEnrollment.inspector))
+        .options(selectinload(CourseEnrollment.judge))
+    ).all()
+    return parse_obj_as(List[CourseEnrollmentRead], enrollments)
+
+@router.get("/course/{course_id}", response_model=List[CourseEnrollmentRead])
+def get_enrollments_by_course(
+    course_id: int,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Obtiene todas las inscripciones para un curso específico.
+    """
+    enrollments = session.exec(
+        select(CourseEnrollment)
+        .where(CourseEnrollment.course_id == course_id)
+        .options(selectinload(CourseEnrollment.person))
+        .options(selectinload(CourseEnrollment.course))
+        .options(selectinload(CourseEnrollment.inspector))
+        .options(selectinload(CourseEnrollment.judge))
+    ).all()
+    return parse_obj_as(List[CourseEnrollmentRead], enrollments)
+
+@router.get("/status/{status_value}", response_model=List[CourseEnrollmentRead])
+def get_enrollments_by_status(
+    status_value: CourseEnrollmentStatus,
+    session: Session = Depends(get_session),
+    current_user: User = Depends(get_current_user)
+):
+    """
+    Obtiene todas las inscripciones con un estado específico.
+    """
+    enrollments = session.exec(
+        select(CourseEnrollment)
+        .where(CourseEnrollment.status == status_value)
+        .options(selectinload(CourseEnrollment.person))
+        .options(selectinload(CourseEnrollment.course))
+        .options(selectinload(CourseEnrollment.inspector))
+        .options(selectinload(CourseEnrollment.judge))
+    ).all()
+    return parse_obj_as(List[CourseEnrollmentRead], enrollments)

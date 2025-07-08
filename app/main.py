@@ -3,7 +3,6 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlmodel import Session, select
 from app.config.database import create_db_and_tables, engine, get_session, Session as DBSession
 
-# Los routers importarán los modelos desde app.models, por lo que estas líneas permanecen iguales.
 from app.routers.person_router import router as person_router
 from app.routers.traffic_safety_course_router import router as course_router
 from app.routers.course_enrollment_router import router as enrollment_router
@@ -32,7 +31,6 @@ def on_startup():
     """
     create_db_and_tables()
 
-# Incluir los routers en la aplicación FastAPI
 app.include_router(person_router)
 app.include_router(course_router)
 app.include_router(enrollment_router)
@@ -55,7 +53,6 @@ def healthcheck(session: DBSession = Depends(get_session)):
     """
     try:
         with session:
-            # Realiza una consulta trivial para verificar la conexión
             session.execute(select(1))
         return {"status": "ok", "database_connection": "successful"}
     except Exception as e:

@@ -5,11 +5,12 @@ from passlib.context import CryptContext
 
 
 # Módulo de seguridad para manejo de contraseñas y JWT
-pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+# DEBE USAR pbkdf2_sha256
+pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 
 # Configuración de JWT
 
-SECRET_KEY = "AoGddp8QEPFNCYsskc-wfpDp3GIDWsRqxt7jpKNdWv8"
+SECRET_KEY = "AoGddp8QEPFNCYsskc-wfpDp3GIDWsRqxt7jpKNdWv8" # Asegúrate de que esta clave sea segura y única
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 120 
 

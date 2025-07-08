@@ -1,65 +1,61 @@
-from sqlmodel import Session, select, func
-from typing import List, Dict, Any, Optional
-from datetime import date, timedelta
+# app/services/course_enrollment_service.py
 
+from sqlmodel import Session, select
+from typing import List, Optional
+from datetime import date
 
-from app.models import CourseEnrollment, CourseEnrollmentCreate, CourseEnrollmentRead, CourseEnrollmentUpdate
-from app.models import Person, TrafficSafetyCourse 
-from app.models.course_enrollment import CourseEnrollmentReportItem, CourseEnrollmentStatus
+# Se eliminó 'CourseEnrollmentReportItem' de la importación
+from app.models import CourseEnrollment, CourseEnrollmentCreate, CourseEnrollmentRead, CourseEnrollmentUpdate, CourseEnrollmentStatus, Person, TrafficSafetyCourse, Inspector, Judge
 
+def create_enrollment(enrollment_create: CourseEnrollmentCreate, session: Session) -> CourseEnrollment:
+    """
+    Crea una nueva inscripción de curso de seguridad vial.
+    """
+    if not enrollment_create.deadline_date:
+        enrollment_create.deadline_date = date.today()
 
+    if not enrollment_create.expiration_date:
+        enrollment_create.expiration_date = date.today()
 
-def create_course_enrollment(enrollment_create: CourseEnrollmentCreate, session: Session) -> CourseEnrollment:
-    enrollment_data = enrollment_create.model_dump() 
+    new_enrollment = CourseEnrollment.from_orm(enrollment_create) # Usar from_orm para Pydantic V1
+    session.add(new_enrollment)
+    session.commit()
+    session.refresh(new_enrollment)
+    return new_enrollment
 
-    if enrollment_data.get("expiration_date") is None:
-        
-        enrollment_data["expiration_date"] = enrollment_create.enrollment_date + timedelta(days=90)
+def get_enrollment_by_id(enrollment_id: int, session: Session) -> Optional[CourseEnrollment]:
+    """
+    Obtiene una inscripción a curso de seguridad vial por su ID.
+    """
+    return session.get(CourseEnrollment, enrollment_id)
+
+def get_all_enrollments(session: Session) -> List[CourseEnrollment]:
+    """
+    Obtiene todas las inscripciones a cursos de seguridad vial.
+    """
+    return session.exec(select(CourseEnrollment)).all()
+
+def update_enrollment(enrollment_id: int, enrollment_update_data: CourseEnrollmentUpdate, session: Session) -> Optional[CourseEnrollment]:
+    """
+    Actualiza una inscripción a curso de seguridad vial existente por su ID.
+    """
+    enrollment = session.get(CourseEnrollment, enrollment_id)
+    if not enrollment:
+        return None
     
-  
-    if enrollment_data.get("status") is None:
-        enrollment_data["status"] = CourseEnrollmentStatus.PENDING
-
-    enrollment = CourseEnrollment.model_validate(enrollment_data)
+    # Usar .dict(exclude_unset=True) para Pydantic V1
+    for key, value in enrollment_update_data.dict(exclude_unset=True).items():
+        setattr(enrollment, key, value)
+    
     session.add(enrollment)
     session.commit()
     session.refresh(enrollment)
     return enrollment
 
-
-def get_course_enrollment_by_id(enrollment_id: int, session: Session) -> CourseEnrollmentRead | None:
-    statement = select(CourseEnrollment).where(CourseEnrollment.id == enrollment_id)
-    enrollment = session.exec(statement).first()
-    if enrollment:
-        enrollment_read = CourseEnrollmentRead.model_validate(enrollment)
-        return enrollment_read
-    return None
-
-
-def get_all_course_enrollments(session: Session) -> List[CourseEnrollmentRead]:
-    
-    statement = select(CourseEnrollment)
-    enrollments = session.exec(statement).all()
-    return [CourseEnrollmentRead.model_validate(e) for e in enrollments]
-
-
-def update_course_enrollment(enrollment_id: int, enrollment_update: Dict[str, Any], session: Session) -> CourseEnrollmentRead | None:
-    enrollment = session.get(CourseEnrollment, enrollment_id)
-    if not enrollment:
-        return None
-
-    updated_data = enrollment_update
-    for key, value in updated_data.items():
-        setattr(enrollment, key, value)
-
-    session.add(enrollment)
-    session.commit()
-    session.refresh(enrollment)
-  
-    return CourseEnrollmentRead.model_validate(enrollment)
-
-
-def delete_course_enrollment(enrollment_id: int, session: Session) -> bool:
+def delete_enrollment(enrollment_id: int, session: Session) -> bool:
+    """
+    Elimina una inscripción a curso de seguridad vial por su ID.
+    """
     enrollment = session.get(CourseEnrollment, enrollment_id)
     if not enrollment:
         return False
@@ -67,97 +63,48 @@ def delete_course_enrollment(enrollment_id: int, session: Session) -> bool:
     session.commit()
     return True
 
-
-
-
-def mark_enrollment_as_completed(enrollment_id: int, session: Session) -> CourseEnrollmentRead | None:
+def complete_enrollment(enrollment_id: int, inspector_id: int, session: Session) -> Optional[CourseEnrollment]:
     """
-    Marca una inscripción como completada y calcula la nueva fecha de vencimiento
-    post-finalización (regla de los 60 días).
+    Marca una inscripción como 'completed' y asigna un inspector.
     """
     enrollment = session.get(CourseEnrollment, enrollment_id)
-    if not enrollment:
+    if not enrollment or enrollment.status != CourseEnrollmentStatus.PENDING:
         return None
-
-    if enrollment.status == CourseEnrollmentStatus.COMPLETED:
-        return CourseEnrollmentRead.model_validate(enrollment)
-
-    enrollment.completion_date = date.today()
+    
     enrollment.status = CourseEnrollmentStatus.COMPLETED
+    enrollment.completion_date = date.today()
+    enrollment.inspector_id = inspector_id
     
-
-    enrollment.expiration_date = enrollment.completion_date + timedelta(days=60)
-
     session.add(enrollment)
     session.commit()
     session.refresh(enrollment)
-    return CourseEnrollmentRead.model_validate(enrollment)
+    return enrollment
 
-
-def mark_enrollment_as_expired_by_action(enrollment_id: int, session: Session) -> CourseEnrollmentRead | None:
+def use_enrollment(enrollment_id: int, judge_id: int, session: Session) -> Optional[CourseEnrollment]:
     """
-    Marca una inscripción como expirada directamente por acción de un inspector/juez.
+    Marca una inscripción como 'used'.
+    Solo si el estado es 'completed'.
     """
     enrollment = session.get(CourseEnrollment, enrollment_id)
-    if not enrollment:
+    if not enrollment or enrollment.status != CourseEnrollmentStatus.COMPLETED:
         return None
     
-    if enrollment.status == CourseEnrollmentStatus.EXPIRED:
-        return CourseEnrollmentRead.model_validate(enrollment) # Ya está expirado
-
-    enrollment.status = CourseEnrollmentStatus.EXPIRED
-    enrollment.expiration_date = date.today() # La hace expirar desde hoy
+    enrollment.status = CourseEnrollmentStatus.USED
+    enrollment.judge_id = judge_id
     
     session.add(enrollment)
     session.commit()
     session.refresh(enrollment)
-    return CourseEnrollmentRead.model_validate(enrollment)
+    return enrollment
 
-
-def get_expiring_or_expired_enrollments_report(
-    session: Session,
-    days_until_expiration: int = 30
-) -> List[CourseEnrollmentReportItem]:
+def get_enrollments_by_person_id(person_id: int, session: Session) -> List[CourseEnrollment]:
     """
-    Genera un reporte de inscripciones a cursos que están próximas a vencer
-    o que ya han vencido. Incluye detalles de la persona y el curso asociado.
+    Obtiene todas las inscripciones de una persona específica.
     """
-    today = date.today()
-    expiring_soon_date = today + timedelta(days=days_until_expiration)
+    return session.exec(select(CourseEnrollment).where(CourseEnrollment.person_id == person_id)).all()
 
-    statement = select(CourseEnrollment, Person, TrafficSafetyCourse).join(
-        Person, CourseEnrollment.person_id == Person.id
-    ).join(
-        TrafficSafetyCourse, CourseEnrollment.course_id == TrafficSafetyCourse.id
-    ).where(
-        
-        (CourseEnrollment.expiration_date <= expiring_soon_date)
-        (CourseEnrollment.expiration_date <= expiring_soon_date)
-    & (CourseEnrollment.status.notin_([CourseEnrollmentStatus.COMPLETED, CourseEnrollmentStatus.CANCELED]))
-    )
-
-    results = session.exec(statement).all()
-
-    report_items = []
-    for enrollment, person, course in results:
-        person_read_item = PersonRead.model_validate(person)
-        course_read_item = TrafficSafetyCourseRead.model_validate(course)
-
-        days_diff = (enrollment.expiration_date - today).days
-        is_expired = enrollment.expiration_date < today
-        
-        report_item = CourseEnrollmentReportItem(
-            id=enrollment.id,
-            enrollment_date=enrollment.enrollment_date,
-            completion_date=enrollment.completion_date,
-            expiration_date=enrollment.expiration_date,
-            status=enrollment.status,
-            notes=enrollment.notes,
-            person=person_read_item,
-            course=course_read_item,
-            days_until_expiration=days_diff,
-            is_expired=is_expired
-        )
-        report_items.append(report_item)
-
-    return report_items
+def get_enrollments_by_course_id(course_id: int, session: Session) -> List[CourseEnrollment]:
+    """
+    Obtiene todas las inscripciones para un curso específico.
+    """
+    return session.exec(select(CourseEnrollment).where(CourseEnrollment.course_id == course_id)).all()

@@ -1,71 +1,59 @@
-from sqlmodel import Field, Relationship, SQLModel, Enum
-from datetime import date
-from typing import List, Optional
-from enum import Enum as PyEnum 
+# app/models/course_enrollment.py
+from __future__ import annotations
 
+from sqlmodel import SQLModel, Field
+from typing import Optional, List
+from datetime import date
+from enum import Enum
+# from sqlalchemy.orm import Mapped
+
+# Importar los esquemas de lectura para las relaciones anidadas en el esquema CourseEnrollmentRead
 from app.models.person import PersonRead
 from app.models.traffic_safety_course import TrafficSafetyCourseRead
+from app.models.inspector import InspectorRead
+from app.models.judge import JudgeRead
 
-
-class CourseEnrollmentStatus(PyEnum):
+class CourseEnrollmentStatus(str, Enum):
     PENDING = "pending"
     COMPLETED = "completed"
+    USED = "used"
     EXPIRED = "expired"
-    CANCELED = "canceled"
-    ACTIVE = "active"
-
+    INCOMPLETE = "incomplete"
 
 class CourseEnrollmentBase(SQLModel):
-    enrollment_date: date = Field(default_factory=date.today) 
+    person_id: int
+    course_id: int
+    enrollment_date: date = Field(default_factory=date.today)
     completion_date: Optional[date] = None
-    expiration_date: Optional[date] = None 
-    status: CourseEnrollmentStatus = CourseEnrollmentStatus.PENDING
-    notes: Optional[str] = None
-    person_id: int = Field(foreign_key="person.id")
-    course_id: int = Field(foreign_key="trafficsafetycourse.id")
-
-
-class CourseEnrollment(CourseEnrollmentBase, table=True):
-    id: Optional[int] = Field(default=None, primary_key=True)
-
-    # Relaciones
-    person: "Person" = Relationship(back_populates="course_enrollments")
-    course: "TrafficSafetyCourse" = Relationship(back_populates="course_enrollments")
-
+    deadline_date: date
+    expiration_date: date
+    status: CourseEnrollmentStatus = Field(default=CourseEnrollmentStatus.PENDING)
+    inspector_id: Optional[int] = None
+    judge_id: Optional[int] = None
 
 class CourseEnrollmentCreate(CourseEnrollmentBase):
     pass
 
-
 class CourseEnrollmentRead(CourseEnrollmentBase):
     id: int
-
-    person: PersonRead
-    course: TrafficSafetyCourseRead
-
+    person: Optional[PersonRead] = None
+    course: Optional[TrafficSafetyCourseRead] = None
+    inspector: Optional[InspectorRead] = None
+    judge: Optional[JudgeRead] = None
 
 class CourseEnrollmentUpdate(SQLModel):
-    enrollment_date: Optional[date] = None
     completion_date: Optional[date] = None
-    expiration_date: Optional[date] = None
     status: Optional[CourseEnrollmentStatus] = None
-    notes: Optional[str] = None
-    person_id: Optional[int] = None
-    course_id: Optional[int] = None
+    inspector_id: Optional[int] = None
+    judge_id: Optional[int] = None
+    deadline_date: Optional[date] = None
+    expiration_date: Optional[date] = None
 
+class CourseEnrollment(CourseEnrollmentBase, table=True):
+    id: Optional[int] = Field(default=None, primary_key=True)
 
-
-class CourseEnrollmentReportItem(SQLModel):
-    id: int
-    enrollment_date: date
-    completion_date: Optional[date] = None
-    expiration_date: date
-    status: CourseEnrollmentStatus
-    notes: Optional[str] = None
-    
-    person: PersonRead 
-
-    course: TrafficSafetyCourseRead 
-   
-    days_until_expiration: Optional[int] = None
-    is_expired: bool = False
+    # RELACIONES TEMPORALMENTE ELIMINADAS
+    # person: Mapped["Person"] = Relationship(back_populates="course_enrollments")
+    # course: Mapped["TrafficSafetyCourse"] = Relationship(back_populates="course_enrollments")
+    # inspector: Mapped[Optional["Inspector"]] = Relationship(back_populates="used_enrollments")
+    # judge: Mapped[Optional["Judge"]] = Relationship(back_populates="used_enrollments")

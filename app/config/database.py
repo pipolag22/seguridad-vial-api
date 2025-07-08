@@ -11,4 +11,12 @@ def get_session() -> Generator[Session, None, None]:
 
 def create_db_and_tables():
     """Importa los modelos localmente para evitar importaciones circulares"""
+    # Importa todos los modelos aquí para que SQLModel.metadata los registre
+    from app.models.person import Person
+    from app.models.traffic_safety_course import TrafficSafetyCourse
+    from app.models.inspector import Inspector
+    from app.models.judge import Judge
+    from app.models.course_enrollment import CourseEnrollment
+    from app.models.user import User
+    
     SQLModel.metadata.create_all(engine)

@@ -1,11 +1,11 @@
+# app/models/user.py
 from __future__ import annotations
-from enum import Enum
+
 from sqlmodel import SQLModel, Field
+from enum import Enum
 from passlib.context import CryptContext
 from typing import Optional
 
-
-# Contexto para el hashing de contraseñas (sin dependencias circulares)
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 class UserRole(str, Enum):
@@ -15,15 +15,15 @@ class UserRole(str, Enum):
     ADMIN = "admin"
 
 class UserBase(SQLModel):
-    username: str = Field(unique=True, index=True)
-    dni: str = Field(unique=True, max_length=20)
+    username: str
+    dni: str
     nombres: str
     apellidos: str
     is_active: Optional[bool] = True
-    role: UserRole = Field(default=UserRole.NORMAL)
+    role: UserRole = Field(default=UserRole.NORMAL, max_length=9)
 
 class UserCreate(UserBase):
-    password: str  # Contraseña en texto plano para la creación
+    password: str
 
 class UserRead(UserBase):
     id: int
